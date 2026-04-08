@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 from dataset.speechcommands import SPEECHCOMMANDS
+from dataset.AudioMNIST import AudioMnistDataset
 from typing import Tuple, Optional, Union
 from torch import Tensor
 import os
@@ -43,7 +44,7 @@ class SubsetSC(SPEECHCOMMANDS):
             
             self.index_list = masklabel(percentage=percentage, batch_size=batch_size, trainsize=len(self._walker))
 
-        
+
 #labels of the dataset, (35)
 labels =  ['backward', 'bed', 'bird', 'cat', 'dog', 'down', 'eight', 'five', 'follow','forward','four',
            'go', 'happy', 'house', 'learn', 'left', 'marvin', 'nine', 'no', 'off', 'on','one', 'right',
@@ -83,6 +84,68 @@ def collate_fn(batch):
 
 
     return tensors, targets
+
+
+# ── AudioMNIST ────────────────────────────────────────────────────────────────
+
+class SubsetAudioMNIST(AudioMnistDataset):
+    """AudioMNIST subset with optional semi-supervised label masking.
+
+    Args:
+        root (str): Path to the AudioMNIST root directory
+            (the folder that contains the ``data/`` subdirectory).
+        subset (str or None): "training", "validation", "testing", or None.
+        percentage (int): Percentage of labelled samples to keep (1-100).
+            100 means fully supervised (no masking).
+        batch_size (int): Batch size used to compute the masking index.
+    """
+    def __init__(self, root: str, subset: str = None, percentage: int = 100, batch_size: int = 256):
+        super().__init__(root, subset=subset)
+
+        def masklabel(percentage=100, batch_size=256, trainsize=0):
+            if percentage == 100:
+                return None
+            random.seed(0)  # Important!
+            index_ = [random.sample(range(i, i + batch_size), int(batch_size * (1 - (percentage / 100))))
+                      for i in range(0, trainsize, batch_size)]
+            return [item for sublist in index_ for item in sublist]
+
+        if subset == "training":
+            self.index_list = masklabel(percentage=percentage, batch_size=batch_size, trainsize=len(self._walker))
+
+
+# AudioMNIST labels: digits 0-9, index 10 = "None" (masked label)
+audiomnist_labels = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'None']
+
+def label_to_index_audiomnist(word):
+    return torch.tensor(audiomnist_labels.index(word))
+
+def index_to_label_audiomnist(index):
+    return audiomnist_labels[index]
+
+def collate_fn_audiomnist(batch):
+    # A data tuple has the form:
+    # waveform, sample_rate, label, speaker_id, utterance_number
+    tensors, targets = [], []
+    for waveform, _, label, *_ in batch:
+        tensors += [waveform]
+        targets += [label_to_index_audiomnist(label)]
+    tensors = pad_sequence(tensors)
+    targets = torch.stack(targets)
+    return tensors, targets
+
+
+def getDataAudioMNIST(root: str = "./AudioMNIST", batch_size: int = 32,
+                      num_workers: int = 0, pin_memory: bool = False, percentage: int = 100):
+    train_set = SubsetAudioMNIST(root, subset="training",   percentage=percentage, batch_size=batch_size)
+    val_set   = SubsetAudioMNIST(root, subset="validation", percentage=percentage)
+    test_set  = SubsetAudioMNIST(root, subset="testing",    percentage=percentage)
+
+    train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True,  drop_last=True,  collate_fn=collate_fn_audiomnist, num_workers=num_workers, pin_memory=pin_memory)
+    val_loader   = torch.utils.data.DataLoader(val_set,   batch_size=batch_size, shuffle=True,  collate_fn=collate_fn_audiomnist, num_workers=0)
+    test_loader  = torch.utils.data.DataLoader(test_set,  batch_size=batch_size, shuffle=False, drop_last=False, collate_fn=collate_fn_audiomnist, num_workers=0)
+
+    return train_loader, test_loader, val_loader
 
 
 def createSpectograms(audio, stft, mel_transform):

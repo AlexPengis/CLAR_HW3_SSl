@@ -22,11 +22,11 @@ hyperparameters = {
         'EPOCHS': 101,
         'BATCH_SIZE': 32,
         'IMG_CHANNEL': 3,
-        'CLASSES': 35,
+        'CLASSES': 10,
         'EVAL_BATCH':8,
         'EVAL_EPOCHS':5,
         'N_LABELS': 100,
-        'DATASET': 'SpeechCommand',
+        'DATASET': 'AudioMNIST',
         'MODEL_TITLE':'supervised'
 }
 
@@ -49,13 +49,13 @@ def model_pipeline(hyper, args):
 def create(config):
 
     # Get dataloaders
-    trainloader,testloader, valloader  = getData(batch_size=config.BATCH_SIZE, num_workers=8, pin_memory=False, percentage = config.N_LABELS)
-    
+    trainloader,testloader, valloader  = getDataAudioMNIST(batch_size=config.BATCH_SIZE, num_workers=8, pin_memory=False, percentage=config.N_LABELS)
+
     # Create model
     model = Net(img_channels=config.IMG_CHANNEL, num_classes = config.CLASSES).to(device)
 
     # Define the CrossEntropy loss
-    ce_loss = nn.CrossEntropyLoss(ignore_index=35) # Ignore index 35 which is None, used to mask the labels!
+    ce_loss = nn.CrossEntropyLoss(ignore_index=10) # Ignore index 10 which is None, used to mask the labels!
 
     #Define Melspectogram and STFT (Magnitude and Phase) 
     mel_transform = torchaudio.transforms.MelSpectrogram(sample_rate=16000, n_fft=2048, hop_length=128, n_mels=128,f_min=40, f_max=8000, mel_scale="slaney").to(device)
@@ -147,7 +147,7 @@ def evaluationphase(model, config, mel_transform, stft_trasform):
     
     model.eval()
     # Get dataloaders
-    trainloader,testloader, valloader  = getData(batch_size=config.EVAL_BATCH, num_workers=8, pin_memory=False, percentage=100)
+    trainloader,testloader, valloader  = getDataAudioMNIST(batch_size=config.EVAL_BATCH, num_workers=8, pin_memory=False, percentage=100)
 
     # Freeze the gradients for model1
     for param in model.parameters():
@@ -251,13 +251,13 @@ def main():
     parser = argparse.ArgumentParser(description='CLAR:Contrastive Learning of Auditory Representations ')
     parser.add_argument("--lr", type=float, default=3e-4, help='learning rate')
     parser.add_argument("--weight_decay", type=float, default=1e-6, help='Weight decay')
-    parser.add_argument("--dataset", type=str, default="SpeechCommand", help='dataset')
+    parser.add_argument("--dataset", type=str, default="AudioMNIST", help='dataset')
     parser.add_argument("--b1", type=float, default="0.9", help='beta 1')
     parser.add_argument("--b2", type=float, default="0.999", help='beta 2')
     parser.add_argument("--epochs", type=int, default="101", help='Training epochs')
     parser.add_argument("--Batch_size", type=int, default="256", help='Batch size')
     parser.add_argument("--Img_channel", type=int, default="3", help='img channel')
-    parser.add_argument("--classes", type=int, default="35", help='dataset class')
+    parser.add_argument("--classes", type=int, default="10", help='dataset class')
     parser.add_argument("--eval_batch", type=int, default="64", help='Evaluation Batch')
     parser.add_argument("--eval_epochs", type=int, default="5", help='Evaluation Epoch training')
     parser.add_argument("--lab_percentage", type=int, default="100", help='Percentage of labels')
