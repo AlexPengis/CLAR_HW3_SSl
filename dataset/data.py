@@ -1,5 +1,4 @@
 import matplotlib.pyplot as plt
-from dataset.speechcommands import SPEECHCOMMANDS
 from dataset.AudioMNIST import AudioMnistDataset
 from typing import Tuple, Optional, Union
 from torch import Tensor
@@ -10,10 +9,15 @@ import torchaudio.transforms as transforms
 import math
 import random
 
+try:
+    from dataset.speechcommands import SPEECHCOMMANDS as _SCBase
+except ImportError:
+    _SCBase = object  # torchaudio version doesn't support SpeechCommands download utils
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-class SubsetSC(SPEECHCOMMANDS):
+class SubsetSC(_SCBase):
     def __init__(self, subset: str = None, percentage = 1, batch_size = 256):
         super().__init__("./", download=True)
 
