@@ -2,6 +2,8 @@ import torch
 import torch as nn
 from torch import optim
 import wandb
+import numpy as np
+import os
 from tqdm import tqdm
 from dataset.data import *
 from net import *
@@ -69,11 +71,11 @@ def create(config):
 
 def train(model, ce_loss, optimizer, trainloader,config, mel_transform, stft_trasform):
 
-    #telling wand to watch
+    #telling wandb to watch gradients and parameters
     if wandb.run is not None:
-        wandb.watch(model, optimizer, log="all", log_freq=100)
+        wandb.watch(model, log="all", log_freq=100)
 
-    scaler = torch.cuda.amp.GradScaler()
+    scaler = torch.amp.GradScaler('cuda')
 
     for epoch in range(config.EPOCHS):
         progress_bar = tqdm(total=len(trainloader), unit='step')
@@ -89,7 +91,7 @@ def train(model, ce_loss, optimizer, trainloader,config, mel_transform, stft_tra
             spectograms,audios = createModelInput(audio, mel_transform, stft_trasform, augmentation=True)            
 
             # Model's ouput two emb vectors
-            with torch.cuda.amp.autocast():
+            with torch.amp.autocast('cuda'):
                 audio_emb, spect_emb, _, _, output = model(spectograms,audios)
 
                 categorical_cross_entropy =  ce_loss(output, labels)
@@ -118,11 +120,20 @@ def train(model, ce_loss, optimizer, trainloader,config, mel_transform, stft_tra
             wandb.log({"epoch":epoch, "loss":np.mean(losses), "categorialL":np.mean(celos) })
         
             
-        if epoch%10==0: 
-            # EVALUATION HEAD  
-            torch.save(model.state_dict(), f"models/model_{config.MODEL_TITLE}.pt")
+        if epoch%10==0:
+            # EVALUATION HEAD
+            os.makedirs("models", exist_ok=True)
+            model_path = f"models/model_{config.MODEL_TITLE}.pt"
+            torch.save(model.state_dict(), model_path)
             accuracy_test, accuracy_validation = evaluationphase(model, config, mel_transform, stft_trasform)
-            wandb.log({"accuracy_test":accuracy_test, "accuracy_validation":accuracy_validation})
+            if wandb.run is not None:
+                # Log metrics
+                wandb.log({"epoch": epoch, "accuracy_test": accuracy_test, "accuracy_validation": accuracy_validation})
+                # Save model file to wandb
+                artifact = wandb.Artifact(name=config.MODEL_TITLE, type="model",
+                                          description=f"Checkpoint at epoch {epoch}")
+                artifact.add_file(model_path)
+                wandb.log_artifact(artifact)
     
     return
 
