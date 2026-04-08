@@ -127,14 +127,24 @@ def label_to_index_audiomnist(word):
 def index_to_label_audiomnist(index):
     return audiomnist_labels[index]
 
+_AUDIOMNIST_RESAMPLE = torchaudio.transforms.Resample(orig_freq=48000, new_freq=16000)
+_AUDIOMNIST_TARGET_LEN = 16000  # 1 second at 16 kHz, matches STFT/Mel config in supervised.py
+
 def collate_fn_audiomnist(batch):
     # A data tuple has the form:
     # waveform, sample_rate, label, speaker_id, utterance_number
     tensors, targets = [], []
     for waveform, _, label, *_ in batch:
-        tensors += [waveform]
-        targets += [label_to_index_audiomnist(label)]
-    tensors = pad_sequence(tensors)
+        # Resample from 48 kHz (AudioMNIST native) to 16 kHz (model input rate)
+        waveform = _AUDIOMNIST_RESAMPLE(waveform)
+        # Crop or zero-pad to a fixed 16000 samples so all batches have the same shape
+        if waveform.shape[-1] < _AUDIOMNIST_TARGET_LEN:
+            waveform = torch.nn.functional.pad(waveform, (0, _AUDIOMNIST_TARGET_LEN - waveform.shape[-1]))
+        else:
+            waveform = waveform[..., :_AUDIOMNIST_TARGET_LEN]
+        tensors.append(waveform)
+        targets.append(label_to_index_audiomnist(label))
+    tensors = torch.stack(tensors)   # [B, 1, 16000] — constant shape, no padding mask needed
     targets = torch.stack(targets)
     return tensors, targets
 

@@ -70,21 +70,22 @@ def add_white_noise_(signal, noise_level):
 def timemasking(signal_, batch_size, sample_rate=16000):
     """
     Time masking:given an audio signal, in this transformation we randomly select a small\n
-    segment of the full signal and set the signal values in that segment to normal noise or a\n 
+    segment of the full signal and set the signal values in that segment to normal noise or a\n
     constant value. In our implementation, we not only randomly selected the location of the\n
     masked segment but also we randomly selected the size of the segment. The size of the \n
     masked segment was set to maximally be 1/8 of the input signal.
     """
-    max_mask = int(sample_rate/8)*torch.ones(size=[batch_size])
-    pos_iniziale = torch.randint(low=0, high=sample_rate, size=[batch_size])
-    min_mask = sample_rate-pos_iniziale
-    min_elements = torch.min(min_mask,max_mask)
-    pos_finale = pos_iniziale+min_elements.to(torch.int)
-    indices = torch.arange(sample_rate).unsqueeze(0).expand(batch_size, -1)
+    signal_len = signal_.shape[2]  # use actual length, not hardcoded sample_rate
+    max_mask = int(signal_len / 8) * torch.ones(size=[batch_size])
+    pos_iniziale = torch.randint(low=0, high=signal_len, size=[batch_size])
+    min_mask = signal_len - pos_iniziale
+    min_elements = torch.min(min_mask, max_mask)
+    pos_finale = pos_iniziale + min_elements.to(torch.int)
+    indices = torch.arange(signal_len).unsqueeze(0).expand(batch_size, -1)
     range_mask = (indices >= pos_iniziale.unsqueeze(1)) & (indices <= pos_finale.unsqueeze(1))
-    range_mask = range_mask[:,None,:]
+    range_mask = range_mask[:, None, :]
     signal_[range_mask] = 0
-        
+
     return signal_
 
 def TimeShift():
