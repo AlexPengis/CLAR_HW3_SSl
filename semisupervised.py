@@ -2,6 +2,8 @@ import torch
 import torch as nn
 from torch import optim
 import wandb
+import numpy as np
+import os
 from tqdm import tqdm
 from dataset.data import *
 from net import *
@@ -23,11 +25,11 @@ hyperparameters = {
         'EPOCHS': 201,
         'BATCH_SIZE': 256,
         'IMG_CHANNEL': 3,
-        'CLASSES': 35,
+        'CLASSES': 10,
         'EVAL_BATCH':64,
         'EVAL_EPOCHS':1,
         'N_LABELS': 20,
-        'DATASET': 'SpeechCommand',
+        'DATASET': 'AudioMNIST',
         'MODEL_TITLE':'clar'
 }
 
@@ -51,14 +53,14 @@ def model_pipeline(hyper, args):
 def create(config):
 
     # Get dataloaders
-    trainloader,testloader, valloader  = getData(batch_size=config.BATCH_SIZE, num_workers=8, pin_memory=False, percentage = config.N_LABELS)
+    trainloader,testloader, valloader  = getDataAudioMNIST(batch_size=config.BATCH_SIZE, num_workers=8, pin_memory=False, percentage=config.N_LABELS)
     
     # Create model
     model = Net(img_channels=config.IMG_CHANNEL, num_classes = config.CLASSES).to(device)
 
     # Define the constrastive loss and crossentropy loss
     loss = ContrastiveLoss(batch_size=config.BATCH_SIZE)
-    ce_loss = nn.CrossEntropyLoss(ignore_index=35)   #index=35 is used to mask the labels!
+    ce_loss = nn.CrossEntropyLoss(ignore_index=10)   #index=10 is used to mask the labels!
 
     #Define Melspectogram and STFT (Magnitude and Phase) 
     mel_transform = torchaudio.transforms.MelSpectrogram(sample_rate=16000, n_fft=2048, hop_length=128, n_mels=128,f_min=40, f_max=8000, mel_scale="slaney").to(device)
@@ -72,11 +74,11 @@ def create(config):
 
 def train(model, closs,ce_loss, optimizer, trainloader,config, mel_transform, stft_trasform):
 
-    #telling wand to watch
+    #telling wandb to watch gradients and parameters
     if wandb.run is not None:
-        wandb.watch(model, optimizer, log="all", log_freq=100)
+        wandb.watch(model, log="all", log_freq=100)
 
-    scaler = torch.cuda.amp.GradScaler()
+    scaler = torch.amp.GradScaler('cuda')
 
     for epoch in range(config.EPOCHS):
         progress_bar = tqdm(total=len(trainloader), unit='step')
@@ -93,7 +95,7 @@ def train(model, closs,ce_loss, optimizer, trainloader,config, mel_transform, st
             spectograms,audios = createModelInput(audio, mel_transform, stft_trasform, augmentation=True)            
 
             # Model's ouput two emb vectors
-            with torch.cuda.amp.autocast():
+            with torch.amp.autocast('cuda'):
                 audio_emb, spect_emb, _, _, output = model(spectograms,audios)
                 contrastive_loss = closs(audio_emb, spect_emb)
                 categorical_cross_entropy =  ce_loss(output, labels)
@@ -126,11 +128,18 @@ def train(model, closs,ce_loss, optimizer, trainloader,config, mel_transform, st
             wandb.log({"epoch":epoch, "loss":np.mean(losses),"contrastiveL":np.mean(clos_), "categorialL":np.mean(celos) })
         
             
-        if epoch%10==0: 
-            # EVALUATION HEAD  
-            torch.save(model.state_dict(), f"models/model_{config.MODEL_TITLE}.pt")
+        if epoch%10==0:
+            # EVALUATION HEAD
+            os.makedirs("models", exist_ok=True)
+            model_path = f"models/model_{config.MODEL_TITLE}.pt"
+            torch.save(model.state_dict(), model_path)
             accuracy_test, accuracy_validation = evaluationphase(model, config, mel_transform, stft_trasform)
-            wandb.log({"accuracy_test":accuracy_test, "accuracy_validation":accuracy_validation})
+            if wandb.run is not None:
+                wandb.log({"epoch": epoch, "accuracy_test": accuracy_test, "accuracy_validation": accuracy_validation})
+                artifact = wandb.Artifact(name=config.MODEL_TITLE, type="model",
+                                          description=f"Checkpoint at epoch {epoch}")
+                artifact.add_file(model_path)
+                wandb.log_artifact(artifact)
     
     return
 
@@ -151,7 +160,7 @@ def evaluationphase(model, config, mel_transform, stft_trasform):
     
     model.eval()
     # Get dataloaders
-    trainloader,testloader, valloader  = getData(batch_size=config.EVAL_BATCH, num_workers=8, pin_memory=False, percentage=100)
+    trainloader,testloader, valloader  = getDataAudioMNIST(batch_size=config.EVAL_BATCH, num_workers=8, pin_memory=False, percentage=100)
     # Freeze the gradients for model1
     for param in model.parameters():
         param.requires_grad = False
@@ -254,13 +263,13 @@ def main():
     parser = argparse.ArgumentParser(description='CLAR:Contrastive Learning of Auditory Representations ')
     parser.add_argument("--lr", type=float, default=3e-4, help='learning rate')
     parser.add_argument("--weight_decay", type=float, default=1e-6, help='Weight decay')
-    parser.add_argument("--dataset", type=str, default="SpeechCommand", help='dataset')
+    parser.add_argument("--dataset", type=str, default="AudioMNIST", help='dataset')
     parser.add_argument("--b1", type=float, default="0.9", help='beta 1')
     parser.add_argument("--b2", type=float, default="0.999", help='beta 2')
     parser.add_argument("--epochs", type=int, default="101", help='Training epochs')
     parser.add_argument("--Batch_size", type=int, default="256", help='Batch size')
     parser.add_argument("--Img_channel", type=int, default="3", help='img channel')
-    parser.add_argument("--classes", type=int, default="35", help='dataset class')
+    parser.add_argument("--classes", type=int, default="10", help='dataset class')
     parser.add_argument("--eval_batch", type=int, default="64", help='Evaluation Batch')
     parser.add_argument("--eval_epochs", type=int, default="5", help='Evaluation Epoch training')
     parser.add_argument("--lab_percentage", type=int, default="100", help='Percentage of labels')
