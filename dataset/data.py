@@ -149,7 +149,7 @@ def collate_fn_audiomnist(batch):
     return tensors, targets
 
 
-def getDataAudioMNIST(root: str = "./AudioMNIST", batch_size: int = 32,
+def getDataAudioMNIST(root: str = "/home/alexey/DLS/DLS_Spring_2026_Speach/HW_SSL3_DLS_speach2026/AudioMNIST", batch_size: int = 32,
                       num_workers: int = 0, pin_memory: bool = False, percentage: int = 100):
     train_set = SubsetAudioMNIST(root, subset="training",   percentage=percentage, batch_size=batch_size)
     val_set   = SubsetAudioMNIST(root, subset="validation", percentage=percentage)

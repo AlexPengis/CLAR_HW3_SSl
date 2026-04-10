@@ -36,7 +36,7 @@ hyperparameters = {
 def model_pipeline(hyper, args):
 
     
-    with wandb.init(project="CLAR", config=hyper, mode=args.wandb):
+    with wandb.init(project="CLAR", config=hyper, mode='run'):
         #access all HPs through wandb.config
         config = wandb.config
 
@@ -273,7 +273,7 @@ def main():
     parser.add_argument("--eval_epochs", type=int, default="5", help='Evaluation Epoch training')
     parser.add_argument("--lab_percentage", type=int, default="100", help='Percentage of labels')
     parser.add_argument("--model_title", type=str, default="test", help='Model name')
-    parser.add_argument("--wandb", type=str, default="disabled", help='Wandb logging')
+    parser.add_argument("--wandb", type=str, default="enabled", help='Wandb logging')
 
     args = parser.parse_args()
 
